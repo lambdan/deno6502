@@ -7,7 +7,7 @@ Deno.test("CPU reset", () => {
   assertEquals(cpu.SP, 0xfd);
 });
 
-Deno.test("LDA instruction", () => {
+Deno.test("LDA", () => {
   const cpu = new CPU();
 
   // Value 2
@@ -22,4 +22,14 @@ Deno.test("LDA instruction", () => {
   cpu.LDA(1);
   assertEquals(cpu.A, 0, "A is now 0");
   assertEquals(cpu.Z, true, "Zero flag should be on");
+});
+
+Deno.test("STA", () => {
+  const cpu = new CPU();
+  cpu.reset();
+
+  cpu.write(1, 2);
+  cpu.LDA(1);
+  cpu.STA(3);
+  assertEquals(cpu.mem[3], 2);
 });

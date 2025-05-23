@@ -75,6 +75,11 @@ export class CPU {
     // negative flag set if bit 7 of A is set
     this.N = (this.A & (1 << 7)) !== 0;
   }
+
+  /** Stores the contents of the accumulator into the memory address */
+  STA(addr: number) {
+    this.mem[addr] = this.A;
+  }
 }
 
 const c = new CPU();
