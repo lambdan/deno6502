@@ -1,8 +1,8 @@
 import { CPU } from "./cpu.ts";
 
-const c = new CPU();
+const c = new CPU(true);
 
-c.executeProgram(
+c.loadProgram(
   [
     0xa9, // LDA
     0x02, // 2
@@ -10,10 +10,9 @@ c.executeProgram(
     0x69, // ADC
     0x02, // 2
   ],
-  true
+  0x00
 );
-
-c.debugPrint();
+c.run(0x00);
 await Deno.writeFile("mem.bin", new Uint8Array(c.mem));
 
 /*

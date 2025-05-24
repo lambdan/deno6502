@@ -25,45 +25,49 @@ export class CPU {
   /** Program Counter */
   PC = 0;
   /** Status Register: N - Negative */
-  N = false;
+  N = 0;
   /** Status Register: V: Overflow */
-  V = false;
+  V = 0;
   /** Status Register: B: Break */
-  B = false;
+  B = 0;
   /** Status register: D: Decimal */
-  D = false;
+  D = 0;
   /** Status Register Interrupt Disable */
-  I = false;
+  I = 0;
   /** Status Register Zero */
-  Z = false;
+  Z = 0;
   /** Status Register Carry */
-  C = false;
+  C = 0;
   /** Memory (64 KB) */
   mem: number[] = new Array(64 * 1024);
   /** How many cycles the CPU has done */
   cycles = 0;
+  verbose = false;
 
-  constructor() {
-    this.reset();
+  constructor(verbose = false) {
+    this.verbose = verbose;
+    this.reset(true);
   }
 
   /** "Resets" CPU. Parameter to set PC address */
-  reset(PC = 0x00) {
-    this.PC = PC;
+  reset(clearMem = false) {
+    this.PC = 0x00;
     this.A = 0;
     this.X = 0;
     this.Y = 0;
     this.SP = 0xfd;
-    this.N = false;
-    this.V = false;
-    this.B = false;
-    this.D = false;
-    this.I = false;
-    this.Z = false;
-    this.C = false;
+    this.N = 0;
+    this.V = 0;
+    this.B = 0;
+    this.D = 0;
+    this.I = 0;
+    this.Z = 0;
+    this.C = 0;
     this.cycles = 0;
-    for (let i = 0; i < this.mem.length; i++) {
-      this.mem[i] = 0x00;
+    if (clearMem) {
+      for (let i = 0; i < this.mem.length; i++) {
+        this.mem[i] = 0x00;
+      }
     }
   }
 
@@ -76,7 +80,8 @@ export class CPU {
     if (addr < 0 || addr >= this.mem.length) {
       throw new Error(`Memory read out of bounds: ${addr}`);
     }
-    return this.mem[addr];
+    const val = this.mem[addr];
+    return val;
   }
 
   write(addr: number, val: number) {
@@ -86,20 +91,42 @@ export class CPU {
     this.mem[addr] = val & 0xff;
   }
 
-  debugPrint() {
+  headerPrinted = false;
+  debugPrint(msg = "") {
+    if (!this.verbose) {
+      return;
+    }
+
+    if (!this.headerPrinted) {
+      console.log("PC\tA\tX\tY\tSP\t|NVBDIZC|\tCYCLE\tMessage");
+      this.headerPrinted = true;
+    }
+
+    // PC, A, X, Y, SP, N, V, B, D, I, Z, C, CYCLE
     console.log(
-      `CYC:${this.cycles}\tPC:${this.PC}\tA:${this.A}\tX:${this.X}\tY:${this.Y}\tSP:${this.SP}\tC:${this.C}\tZ:${this.Z}\tI:${this.I}\tD:${this.D}\tB:${this.B}\tV:${this.V}\tN:${this.N}`
+      `${this.PC.toString(16).padStart(4, "0")}\t` +
+        `${this.A.toString(16).padStart(2, "0")}\t` +
+        `${this.X.toString(16).padStart(2, "0")}\t` +
+        `${this.Y.toString(16).padStart(2, "0")}\t` +
+        `${this.SP.toString(16).padStart(2, "0")}\t` +
+        `|` +
+        `${this.N}` +
+        `${this.V}` +
+        `${this.B}` +
+        `${this.D}` +
+        `${this.I}` +
+        `${this.Z}` +
+        `${this.C}` +
+        `|\t` +
+        `${this.cycles}\t${msg} `
     );
-    //console.log(`Memory (first 16 bytes):`, this.mem.slice(0, 16));
   }
 
-  /** Execute PC. Returns false when BRK is hit. */
-  exec(print = false): boolean {
+  /** Execute PC. Returns false if BRK is hit. */
+  exec(): boolean {
     const op = this.fetchPC();
-    if (print) {
-      this.debugPrint();
-      console.log(`> ${opLookup(op)} ${opLookup(this.mem[this.PC])}`);
-    }
+    this.debugPrint(`executing ${op.toString(16)} (${opLookup(op)})`);
+
     switch (op) {
       case 0x00: // BRK
         // TODO?
@@ -119,19 +146,32 @@ export class CPU {
     return true;
   }
 
-  executeProgram(prog: number[], print = false) {
-    const startAt = 0x00; // where in memory to store program
-    this.reset(startAt);
-    for (const b of prog) {
-      this.write(this.PC++, b);
+  /** Sets PC to startAt, and then calls exec() until it returns false */
+  run(from = 0x00) {
+    this.debugPrint(`Running program from ${from.toString(16)}`);
+    this.PC = from;
+    while (this.exec()) {
+      // Execute until false
     }
-    this.PC = startAt;
-    //console.log(this.PC, this.mem);
-    for (const _ of prog) {
-      if (!this.exec(print)) {
-        // brk reached
-        break;
+  }
+
+  /** Supply program either as a number array or space separated string
+   * ```ts
+   * // Example
+   * .executeProgram("0xa9 0x02 0xea 0x69 0x02"); // LDA #$02, NOP, ADC #$02
+   * ```
+   */
+  loadProgram(prog: number[] | string, startAt = 0x00) {
+    if (typeof prog === "string") {
+      const s = prog.trim();
+      prog = [];
+      for (const byte of s.split(" ")) {
+        prog.push(+byte.trim());
       }
+    }
+
+    for (let i = 0; i < prog.length; i++) {
+      this.mem[startAt + i] = prog[i] & 0xff;
     }
   }
 
@@ -140,10 +180,12 @@ export class CPU {
    * Loads a byte of memory into the accumulator setting the zero and negative flags as appropriate.
    */
   OP_LDA_Immediate() {
-    this.A = this.fetchPC();
+    const val = this.fetchPC();
+    this.debugPrint(`LDA #${val.toString(16)}`);
+    this.A = val;
     this.cycles += 1;
-    this.Z = this.A === 0;
-    this.N = (this.A & 0x80) !== 0;
+    this.Z = +(this.A === 0);
+    this.N = +((this.A & 0x80) !== 0);
     this.cycles += 2;
   }
 
@@ -151,6 +193,7 @@ export class CPU {
    * The NOP instruction causes no changes to the processor other than the normal incrementing of the program counter to the next instruction.
    */
   OP_NOP() {
+    this.debugPrint("NOP");
     this.cycles += 2;
   }
 
@@ -162,11 +205,12 @@ export class CPU {
    */
   OP_ADC_Immediate() {
     const val = this.fetchPC();
+    this.debugPrint(`ADC #${val.toString(16)}`);
     const result = this.A + val + (this.C ? 1 : 0);
     this.A = result & 0xff;
-    this.Z = (result & 0xff) === 0;
-    this.C = result > 0xff;
-    this.N = (result & 0x80) !== 0;
+    this.Z = +((result & 0xff) === 0);
+    this.C = +(result > 0xff);
+    this.N = +((result & 0x80) !== 0);
     this.cycles += 2;
   }
 }
