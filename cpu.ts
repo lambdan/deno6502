@@ -8,6 +8,8 @@ function opLookup(opcode: number): string {
       return "LDA";
     case 0xea:
       return "NOP";
+    case 0xc9:
+      return "CMP";
     default:
       return `$${opcode.toString(16)}`;
   }
@@ -140,6 +142,9 @@ export class CPU {
       case 0x69: // ADC immediate
         this.OP_ADC_Immediate();
         break;
+      case 0xc9: // CMP immediate
+        this.OP_CMP_Immediate();
+        break;
       default:
         throw new Error(`Unimplemented OP ${op.toString(16)}`);
     }
@@ -222,5 +227,21 @@ export class CPU {
     this.C = +(result > 0xff);
     this.N = +((result & 0x80) !== 0);
     this.cycles += 2;
+  }
+
+  /**
+   * This instruction compares the contents of the accumulator with another
+   * memory held value and sets the zero and carry flags as appropriate.
+   * C = set if A >= M
+   * Z = set if A == M
+   * N = set if bit 7 of the result is set
+   */
+  OP_CMP_Immediate() {
+    const val = this.fetchPC();
+    this.debugPrint(`CMP #${val.toString(16)}`);
+    const result = this.A - val;
+    this.C = +(result >= 0);
+    this.Z = +(result === 0);
+    this.N = +((result & 0x80) !== 0);
   }
 }

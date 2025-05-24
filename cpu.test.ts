@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "jsr:@std/assert";
 import { CPU } from "./cpu.ts";
 
 Deno.test("LDA Immediate", () => {
@@ -33,4 +33,38 @@ Deno.test("NOP", () => {
   cpu.run();
 
   assertEquals(cpu.cycles, 2);
+});
+
+Deno.test("CMP", () => {
+  const cpu = new CPU();
+  // A == M
+  cpu.loadProgram("A9 02 C9 02");
+  cpu.run();
+  assertEquals(cpu.Z, 1);
+  assertEquals(cpu.C, 1);
+  assertEquals(cpu.N, 0);
+
+  // A != M
+
+  cpu.reset(true);
+  cpu.loadProgram("A9 02 C9 03");
+  cpu.run();
+  assertEquals(cpu.Z, 0);
+  assertEquals(cpu.C, 0);
+  assertEquals(cpu.N, 1);
+
+  // A > M
+  cpu.reset(true);
+  cpu.loadProgram("a9 ff c9 aa");
+  cpu.run();
+  assertEquals(cpu.Z, 0);
+  assertEquals(cpu.C, 1);
+  assertEquals(cpu.N, 0);
+
+  cpu.reset(true);
+  cpu.loadProgram("a9 ff c9 01");
+  cpu.run();
+  assertEquals(cpu.N, 1);
+  assertEquals(cpu.Z, 0);
+  assertEquals(cpu.C, 1);
 });
