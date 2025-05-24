@@ -5,11 +5,19 @@ function opLookup(opcode: number): string {
     case 0x69:
       return "ADC";
     case 0xa9:
-      return "LDA";
+      return "LDA (immediate)";
     case 0xea:
       return "NOP";
     case 0xc9:
       return "CMP";
+    case 0x85:
+      return "STA";
+    case 0xe6:
+      return "INC (zero page)";
+    case 0xa5:
+      return "LDA (zero page)";
+    case 0x90:
+      return "BCC";
     default:
       return `$${opcode.toString(16)}`;
   }
@@ -26,19 +34,19 @@ export class CPU {
   SP = 0;
   /** Program Counter */
   PC = 0;
-  /** Status Register: N - Negative */
+  /** Negative flag */
   N = 0;
-  /** Status Register: V: Overflow */
+  /** Overflow flag */
   V = 0;
-  /** Status Register: B: Break */
+  /** Break command */
   B = 0;
-  /** Status register: D: Decimal */
+  /** Decimal mode */
   D = 0;
-  /** Status Register Interrupt Disable */
+  /** Interrupt disable */
   I = 0;
-  /** Status Register Zero */
+  /** Zero flag */
   Z = 0;
-  /** Status Register Carry */
+  /** Carry flag */
   C = 0;
   /** Memory (64 KB) */
   mem: number[] = new Array(64 * 1024);
@@ -91,6 +99,7 @@ export class CPU {
       throw new Error(`Memory write out of bounds: ${addr}`);
     }
     this.mem[addr] = val & 0xff;
+    this.debugPrint(`wr ${addr}=${this.mem[addr]}`);
   }
 
   headerPrinted = false;
@@ -125,16 +134,20 @@ export class CPU {
   }
 
   /** Execute PC. Returns false if BRK is hit. */
-  exec(): boolean {
+  exec() {
     const op = this.fetchPC();
     this.debugPrint(`executing ${op.toString(16)} (${opLookup(op)})`);
 
     switch (op) {
       case 0x00: // BRK
-        // TODO?
-        return false;
+        // TODO
+        this.B = 1;
+        break;
       case 0xa9: // LDA Immediate
         this.OP_LDA_Immediate();
+        break;
+      case 0xa5: // LDA zero page
+        this.OP_LDA_ZeroPage();
         break;
       case 0xea: // NOP
         this.OP_NOP();
@@ -145,18 +158,27 @@ export class CPU {
       case 0xc9: // CMP immediate
         this.OP_CMP_Immediate();
         break;
+      case 0x85:
+        this.OP_STA_ZeroPage();
+        break;
+      case 0xe6:
+        this.OP_INC_ZeroPage();
+        break;
+      case 0x90:
+        this.OP_BCC();
+        break;
       default:
         throw new Error(`Unimplemented OP ${op.toString(16)}`);
     }
-    return true;
   }
 
   /** Sets PC to startAt, and then calls exec() until it returns false */
   run(from = 0x00) {
     this.debugPrint(`Running program from ${from.toString(16)}`);
     this.PC = from;
-    while (this.exec()) {
-      // Execute until false
+    while (this.B === 0) {
+      // Execute until break
+      this.exec();
     }
   }
 
@@ -190,18 +212,35 @@ export class CPU {
     }
   }
 
-  /**
-   * A,Z,N = M
-   * Loads a byte of memory into the accumulator setting the zero and negative flags as appropriate.
+  /** LDA Implementation
+   * Z = 	Set if A = 0
+   * N = Set if bit 7 of A is set
    */
-  OP_LDA_Immediate() {
-    const val = this.fetchPC();
-    this.debugPrint(`LDA #${val.toString(16)}`);
+  _LDA(val: number) {
     this.A = val;
-    this.cycles += 1;
     this.Z = +(this.A === 0);
     this.N = +((this.A & 0x80) !== 0);
     this.cycles += 2;
+  }
+
+  /**
+   * LDA; value from next byte
+   */
+  OP_LDA_Immediate() {
+    const val = this.fetchPC();
+    this.debugPrint(`LDA #$${val.toString(16)}`);
+    this._LDA(val);
+  }
+
+  /**
+   * LDA; value read from adress
+   */
+  OP_LDA_ZeroPage() {
+    const targetAddr = this.fetchPC();
+    const val = this.read(targetAddr);
+    this.cycles += 1;
+    this.debugPrint(`LDA $${val.toString(16)}`);
+    this._LDA(val);
   }
 
   /**
@@ -243,5 +282,52 @@ export class CPU {
     this.C = +(result >= 0);
     this.Z = +(result === 0);
     this.N = +((result & 0x80) !== 0);
+    this.cycles += 2;
+  }
+
+  /**
+   * Stores the contents of the accumulator into memory.
+   */
+  OP_STA_ZeroPage() {
+    const targetAddr = this.fetchPC();
+    this.debugPrint(`STA #${targetAddr.toString(16)}`);
+    this.write(targetAddr, this.A);
+    this.cycles += 3;
+  }
+
+  /**
+   * Adds one to the value held at a specified memory location setting the zero and negative flags as appropriate.
+   * Z = set if result is zero
+   * N = set if bit 7 of result is set
+   */
+  OP_INC_ZeroPage() {
+    const targetAddr = this.fetchPC();
+    this.debugPrint(`INC #${targetAddr.toString(16)}`);
+    const result = this.read(targetAddr) + 0x01;
+    this.write(targetAddr, result);
+    this.Z = +(result === 0);
+    this.N = +((result & 0x80) !== 0);
+    this.cycles += 5;
+  }
+
+  /**
+   * If the carry flag is clear then add the relative displacement to the program counter to cause a branch to a new location.
+   */
+  OP_BCC() {
+    this.cycles += 2;
+    const offset = this.fetchPC();
+    if (this.C === 0) {
+      // "If the carry flag is clear..."
+      const oldPC = this.PC;
+      const signedOffset = offset < 0x80 ? offset : offset - 0x100; // convert to signed
+
+      this.PC += signedOffset;
+      this.cycles += 1; // branch succeeds
+
+      // new page
+      if ((oldPC & 0xff00) !== (this.PC & 0xff00)) {
+        this.cycles += 1;
+      }
+    }
   }
 }
