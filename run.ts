@@ -2,17 +2,25 @@ import { CPU } from "./cpu.ts";
 
 const c = new CPU();
 
-c.reset(0x00);
+c.executeProgram(
+  [
+    0xa9, // LDA
+    0x02, // 2
+    0xea, // NOP
+    0x69, // ADC
+    0x02, // 2
+  ],
+  true
+);
 
-c.write(0x00, 0xa9); // LDA
-c.write(0x01, 0x02); // Immediate value 2
-c.write(0x02, 0xea); // NOP
-c.write(0x03, 0x69); // ADC
-c.write(0x04, 0x02); // Add 2?
+c.debugPrint();
+await Deno.writeFile("mem.bin", new Uint8Array(c.mem));
 
+/*
 console.log("cycles\tPC\tA");
 while (true) {
   console.log(`${c.cycles}\t${c.PC.toString(16)}\t${c.A.toString(16)}`);
   c.exec();
   //if (c.cycles > 10) break;
 }
+*/

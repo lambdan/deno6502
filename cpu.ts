@@ -1,3 +1,18 @@
+function opLookup(opcode: number): string {
+  switch (opcode) {
+    case 0x00:
+      return "BRK";
+    case 0x69:
+      return "ADC";
+    case 0xa9:
+      return "LDA";
+    case 0xea:
+      return "NOP";
+    default:
+      return `$${opcode.toString(16)}`;
+  }
+}
+
 export class CPU {
   /** Accumulator */
   A = 0;
@@ -9,7 +24,6 @@ export class CPU {
   SP = 0;
   /** Program Counter */
   PC = 0;
-
   /** Status Register: N - Negative */
   N = false;
   /** Status Register: V: Overflow */
@@ -24,9 +38,8 @@ export class CPU {
   Z = false;
   /** Status Register Carry */
   C = false;
-
+  /** Memory (64 KB) */
   mem: number[] = new Array(64 * 1024);
-
   /** How many cycles the CPU has done */
   cycles = 0;
 
@@ -49,12 +62,9 @@ export class CPU {
     this.Z = false;
     this.C = false;
     this.cycles = 0;
-
-    // Iniitalize 64 KB of memory
-    for (let i = 0; i < 1024 * 64; i++) {
+    for (let i = 0; i < this.mem.length; i++) {
       this.mem[i] = 0x00;
     }
-    //console.log("CPU reset");
   }
 
   /** Read and increment PC */
@@ -76,10 +86,24 @@ export class CPU {
     this.mem[addr] = val & 0xff;
   }
 
-  /** Execute PC */
-  exec() {
+  debugPrint() {
+    console.log(
+      `CYC:${this.cycles}\tPC:${this.PC}\tA:${this.A}\tX:${this.X}\tY:${this.Y}\tSP:${this.SP}\tC:${this.C}\tZ:${this.Z}\tI:${this.I}\tD:${this.D}\tB:${this.B}\tV:${this.V}\tN:${this.N}`
+    );
+    //console.log(`Memory (first 16 bytes):`, this.mem.slice(0, 16));
+  }
+
+  /** Execute PC. Returns false when BRK is hit. */
+  exec(print = false): boolean {
     const op = this.fetchPC();
+    if (print) {
+      this.debugPrint();
+      console.log(`> ${opLookup(op)} ${opLookup(this.mem[this.PC])}`);
+    }
     switch (op) {
+      case 0x00: // BRK
+        // TODO?
+        return false;
       case 0xa9: // LDA Immediate
         this.OP_LDA_Immediate();
         break;
@@ -91,6 +115,23 @@ export class CPU {
         break;
       default:
         throw new Error(`Unimplemented OP ${op.toString(16)}`);
+    }
+    return true;
+  }
+
+  executeProgram(prog: number[], print = false) {
+    const startAt = 0x00; // where in memory to store program
+    this.reset(startAt);
+    for (const b of prog) {
+      this.write(this.PC++, b);
+    }
+    this.PC = startAt;
+    //console.log(this.PC, this.mem);
+    for (const _ of prog) {
+      if (!this.exec(print)) {
+        // brk reached
+        break;
+      }
     }
   }
 
