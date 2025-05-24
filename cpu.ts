@@ -1,3 +1,6 @@
+// reference: http://www.6502.org/users/obelisk/6502/reference.html
+// other emulator to test against: https://www.masswerk.at/6502/
+
 function opLookup(opcode: number): string {
   switch (opcode) {
     case 0x00:
