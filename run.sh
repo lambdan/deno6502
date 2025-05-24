@@ -1,9 +1,15 @@
 #!/bin/sh
 set -e
-deno --allow-write run.ts
-echo
-echo
-echo
-hexdump -C mem.bin
+
+if [ -z "$1" ]; then
+  echo './run.sh "0x69 0x69"'
+  echo "or"
+  echo './run.sh 6502-binary.bin'
+  exit 1
+fi
+
+
+
+deno --allow-write --allow-read run.ts "$1"
 
 
