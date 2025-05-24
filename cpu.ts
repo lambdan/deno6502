@@ -165,10 +165,20 @@ export class CPU {
     if (typeof prog === "string") {
       const s = prog.trim();
       prog = [];
-      for (const byte of s.split(" ")) {
+      for (let byte of s.split(" ")) {
+        if (byte.length === 2) {
+          // add 0x prefix if missing ("hexdump mode")
+          byte = "0x" + byte;
+        }
+        /*if (byte[0] === "$") {
+          // replace $ with 0x
+          byte = "0x" + byte.slice(1);
+        }*/
         prog.push(+byte.trim());
       }
     }
+
+    //console.log(prog);
 
     for (let i = 0; i < prog.length; i++) {
       this.mem[startAt + i] = prog[i] & 0xff;
